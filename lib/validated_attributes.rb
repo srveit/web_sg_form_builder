@@ -36,7 +36,7 @@ module ActiveRecord
           def #{validates_X_of}_with_audit(*original_attr_names)
             meth = caller.first.split.last.gsub(/[^\w]+/, '')
             given_attr_names = original_attr_names.dup
-            configuration = { :message => ActiveRecord::Errors.default_error_messages[:#{err_message_key}] }
+            configuration = { :message => I18n.translate('activerecord.errors.messages')[:#{err_message_key}] }
             configuration.update(given_attr_names.pop) if given_attr_names.last.is_a?(Hash)            
             self.validated_attributes = (self.validated_attributes ? self.validated_attributes.dup : {})
             if self.validated_attributes[:#{validates_X_of}].kind_of? Array
