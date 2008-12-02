@@ -14,28 +14,40 @@ require 'validated_attributes'
 class WebSgFormBuilder
   include ::ActionView::Helpers::TextHelper
   attr_accessor :builder
-  
-  def initialize(*args)
-    @builder = ::ActionView::Helpers::FormBuilder.new(*args)
+
+  def initialize(object_name, object, template, options, proc)
+    @template = template
+    @builder = ::ActionView::Helpers::FormBuilder.new(object_name, object, template, options, proc)
   end
-  
+
+  def fields_for(record_or_name_or_array, *args, &block)
+    options = args.extract_options!
+    options[:builder] = self.class
+    args << options
+    @builder.fields_for(record_or_name_or_array, *args, &block)
+  end
+
+  def concat(string)
+    @template.concat(string)
+  end
+
   def fieldset(name, &proc)
-    concat("<fieldset><legend>#{name}</legend><dl>", proc.binding)
+    concat("<fieldset><legend>#{name}</legend>\n  <dl>")
     proc.call(self)
-    concat("</dl></fieldset>", proc.binding)
+    concat("</dl>\n</fieldset>")
   end
   
   def dl(&proc)
-    concat("<dl>", proc.binding)
+    concat("<dl>")
     proc.call(self)
-    concat("</dl>", proc.binding)
+    concat("</dl>")
   end
   
   def dd(label, hint = nil, &proc)
     if proc
-      concat("<dt><label class=\"dd\">#{label.to_s}</label> <span class=\"dd\">#{hint}</span></dt><dd>", proc.binding)
+      concat("<dt><label>#{label.to_s}</label> <span>#{hint}</span></dt><dd>")
       proc.call(self)
-      concat("</dd>", proc.binding)
+      concat("</dd>")
     else
       "<dt><label>#{label.to_s.humanize}</label> <span>#{hint}</span></dt><dd>" +
       CGI.escapeHTML(@builder.object.send(label).to_s) +
@@ -45,22 +57,16 @@ class WebSgFormBuilder
   
   def check_box(method, options = {}, checked_value = "1", unchecked_value = "0")
     label = options.delete(:label) || method.to_s.humanize
-    field_id = CGI.escapeHTML([@builder.object_name, method].join('_').downcase)
     @builder.check_box(method, options, checked_value, unchecked_value) +
-    " " +
-    "<label class=\"check_box #{field_id} #{options[:label_class]}\" for=\"#{field_id}\"" +
-    ">#{label}</label>"
+    " " + label_tag_sg(@builder, label, method)
   end
   
   def radio_button(method, tag_value, options = {})
     label = options.delete(:label) || tag_value.to_s.humanize
-    field_id = CGI.escapeHTML([@builder.object_name, method, tag_value].join('_').downcase)
     @builder.radio_button(method, tag_value, options) +
-    " " +
-    "<label class=\"radio_button #{field_id} #{options[:label_class]}\" for=\"#{field_id}\"" +
-    ">#{label}</label>"
+    " " + label_tag_sg(@builder, label, method, tag_value)
   end
-  
+
   def method_missing(input_field, *args)
     case input_field.to_s
     when /hidden|submit|button/
@@ -73,16 +79,29 @@ class WebSgFormBuilder
         method = args.shift
         options = args.shift || {}
         # select has extra argument before options hash
-        opts = options.kind_of?(Hash) ? options : args.first
-        label = (opts.respond_to?(:delete) ? opts.delete(:label) : nil) || method.to_s.humanize
-        hint  = (opts.respond_to?(:delete) ? opts.delete(:hint) : nil)
-        label_class = (opts.respond_to?(:delete) ? opts.delete(:label_class) : nil)
-        field_id = CGI.escapeHTML([@builder.object_name, method].join('_').downcase)
-        "<dt><label class=\"#{input_field} #{field_id} #{label_class}\" for=\"#{field_id}\"" +
-        ">#{label}</label> <span class=\"#{input_field} #{field_id} #{label_class}\">#{hint}</span></dt><dd" +
+        opts = options.kind_of?(Hash) ? options : args.first || {}
+        label = opts.delete(:label) || method.to_s.humanize
+        dt_class = opts.delete(:dt_class)
+        dt_class_attr = dt_class ? " class=\"#{dt_class}\"" : ''
+        dd_class = opts.delete(:dd_class) || dt_class
+        dd_class_attr = dd_class ? " class=\"#{dd_class}\"" : ''
+        
+        hint  = opts.delete :hint
+        "\n  <dt#{dt_class_attr}>" + label_tag_sg(@builder, label, method) +
+          " <span>#{hint}</span></dt>\n  <dd#{dd_class_attr}" + 
         ">#{@builder.send(input_field, method, options, *args)}</dd>"
       end
     end
   end
-  
+
+  private
+
+  def label_tag_sg(builder, label, *args)
+    if args.length == 1
+      builder.label(args.first, label)
+    else
+      field_id = CGI.escapeHTML(([builder.object_name] + args).join('_').downcase)
+      "<label for=\"#{field_id}\">#{label}</label>"
+    end
+  end
 end
