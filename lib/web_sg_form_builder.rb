@@ -3,10 +3,10 @@
 # <form>
 #   <fieldset>
 #     <legend>Some Context</legend>
-#     <dl>
-#       <dt><label for="someid">Name</label></dt>
-#       <dd><input id="someid" ... /></dd>
-#     <dl>
+#     <div class="field">
+#       <label for="someid">Name</label>
+#       <input id="someid" ... />
+#     </div>
 #   </fieldset>
 # <form>
 require 'validated_attributes'
@@ -17,7 +17,8 @@ class WebSgFormBuilder
 
   def initialize(object_name, object, template, options, proc)
     @template = template
-    @builder = ::ActionView::Helpers::FormBuilder.new(object_name, object, template, options, proc)
+    @builder = ::ActionView::Helpers::FormBuilder.new(object_name, object,
+                                                      template, options, proc)
   end
 
   def fields_for(record_or_name_or_array, *args, &block)
@@ -32,39 +33,23 @@ class WebSgFormBuilder
   end
 
   def fieldset(name, &proc)
-    concat("<fieldset><legend>#{name}</legend>\n  <dl>")
+    concat("<fieldset><legend>#{name}</legend>\n")
     proc.call(self)
-    concat("</dl>\n</fieldset>")
+    concat("</fieldset>")
   end
   
-  def dl(&proc)
-    concat("<dl>")
-    proc.call(self)
-    concat("</dl>")
-  end
-  
-  def dd(label, hint = nil, &proc)
-    if proc
-      concat("<dt><label>#{label.to_s}</label> <span>#{hint}</span></dt><dd>")
-      proc.call(self)
-      concat("</dd>")
-    else
-      "<dt><label>#{label.to_s.humanize}</label> <span>#{hint}</span></dt><dd>" +
-      CGI.escapeHTML(@builder.object.send(label).to_s) +
-      "</dd>"
-    end
-  end
-  
-  def check_box(method, options = {}, checked_value = "1", unchecked_value = "0")
-    label = options.delete(:label) || method.to_s.humanize
+  def check_box(method, options = {}, checked_value = "1",
+                unchecked_value = "0")
+    label = options.delete(:label)
     @builder.check_box(method, options, checked_value, unchecked_value) +
-    " " + label_tag_sg(@builder, label, method)
+    " " + label_tag_sg(@builder, label, false, method)
   end
-  
+
+  # TODO: enclose in ul
   def radio_button(method, tag_value, options = {})
-    label = options.delete(:label) || tag_value.to_s.humanize
+    label = options.delete(:label)
     @builder.radio_button(method, tag_value, options) +
-    " " + label_tag_sg(@builder, label, method, tag_value)
+    " " + label_tag_sg(@builder, label, false, method, tag_value)
   end
 
   def method_missing(input_field, *args)
@@ -80,28 +65,28 @@ class WebSgFormBuilder
         options = args.shift || {}
         # select has extra argument before options hash
         opts = options.kind_of?(Hash) ? options : args.first || {}
-        label = opts.delete(:label) || method.to_s.humanize
-        dt_class = opts.delete(:dt_class)
-        dt_class_attr = dt_class ? " class=\"#{dt_class}\"" : ''
-        dd_class = opts.delete(:dd_class) || dt_class
-        dd_class_attr = dd_class ? " class=\"#{dd_class}\"" : ''
+        label = opts.delete(:label)
+        div_class = opts.delete(:div_class) || method.to_s
         
         hint  = opts.delete :hint
-        "\n  <dt#{dt_class_attr}>" + label_tag_sg(@builder, label, method) +
-          " <span>#{hint}</span></dt>\n  <dd#{dd_class_attr}" + 
-        ">#{@builder.send(input_field, method, options, *args)}</dd>"
+        "<div class=#{div_class}>\n  " +
+          label_tag_sg(@builder, label, true, method) +
+          " <span>#{hint}</span>\n  " + 
+        "#{@builder.send(input_field, method, options, *args)}\n</div>"
       end
     end
   end
 
   private
 
-  def label_tag_sg(builder, label, *args)
-    if args.length == 1
-      builder.label(args.first, label)
-    else
-      field_id = CGI.escapeHTML(([builder.object_name] + args).join('_').downcase)
-      "<label for=\"#{field_id}\">#{label}</label>"
+  def label_tag_sg(builder, label, add_colon, method, tag_value = nil)
+    label_text = label || (method.to_s.titleize + (add_colon ? ':' : ''))
+    options = {}
+    if tag_value
+      field_id = CGI.escapeHTML([builder.object_name, method, tag_value].
+                                join('_').downcase)
+      options["for"] = field_id
     end
+    builder.label(method, label_text, options)
   end
 end
